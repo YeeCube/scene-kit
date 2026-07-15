@@ -1,0 +1,22 @@
+[project]
+name = "world-model-kit"
+version = "0.1.0"
+description = "世界模型工具包——基于 RECS SoA ECS 的高性能 Agent-Based Modeling 工具包"
+requires-python = ">=3.13"
+dependencies = [
+    "numpy>=1.24",
+    "recs>=0.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]
+torch = ["torch>=2.0"]
+mlx = ["mlx>=0.10"]
+jax = ["jax>=0.4", "jaxlib>=0.4"]
+all = ["world-model-kit[torch,mlx,jax]"]
+
+[tool.setuptools.packages.find]
+where = ["."]
