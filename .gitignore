@@ -29,6 +29,10 @@ dist-desktop
 
 
 
+.codebuddy/
+
+
+
 *.ffs_db
 
 
