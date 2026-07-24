@@ -1,0 +1,21 @@
+"""Geometry 子模块 —— 六种 geometry 的抽象基类与实现。
+
+每个 geometry 实现以下接口：
+- metric(p, q)          两点间的距离
+- move(positions, delta) 沿方向移动
+- neighborhood(positions, radius) 邻域搜索
+- contains(positions)    点在不在几何里
+- param_to_local(positions) 参数坐标→局部笛卡尔坐标
+"""
+
+from world_model_kit.geometry.base import Geometry
+from world_model_kit.geometry.point import PointGeometry
+from world_model_kit.geometry.surface import SurfaceGeometry
+from world_model_kit.geometry.volume import VolumeGeometry
+
+__all__ = [
+    "Geometry",
+    "PointGeometry",
+    "SurfaceGeometry",
+    "VolumeGeometry",
+]

@@ -182,11 +182,11 @@ class EntityPoolBridge:
     # ------------------------------------------------------------------
 
     @property
-    def x(self) -> dict[str, np.ndarray]:
-        """所有 kind 的 x 列视图字典。"""
-        return {k: p.get_attr("x") for k, p in self._pools.items() if "x" in p.d}
+    def u_pos(self) -> dict[str, np.ndarray]:
+        """所有 kind 的 u 列视图字典。"""
+        return {k: p.get_attr("u") for k, p in self._pools.items() if "u" in p.d}
 
     @property
-    def y(self) -> dict[str, np.ndarray]:
-        """所有 kind 的 y 列视图字典。"""
-        return {k: p.get_attr("y") for k, p in self._pools.items() if "y" in p.d}
+    def v_pos(self) -> dict[str, np.ndarray]:
+        """所有 kind 的 v 列视图字典。"""
+        return {k: p.get_attr("v") for k, p in self._pools.items() if "v" in p.d}
