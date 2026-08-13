@@ -1,10 +1,10 @@
 [project]
-name = "world-model-kit"
-version = "0.2.0"
-description = "世界模型工具包 v0.2.0 —— 基于 RECS SoA ECS 的高性能 Agent-Based Modeling 工具包，geometry 驱动的嵌套 Entity 树 + tags 语义标注"
+name = "scene-kit"
+version = "0.5.1"
+description = "SceneKit · 场景工具包 v0.5.1 —— 基于 RECS SoA 的 Entity 场景建模、列式协议与交互式前端 SDK（开源）。Scene Suite 伞形品牌下的 SDK 层。"
 requires-python = ">=3.13"
 authors = [
-    {name = "world-model-kit-team", email = "team@world-model-kit.dev"}
+    {name = "scene-kit-team", email = "team@scene-kit.dev"}
 ]
 license = {text = "MIT"}
 readme = "README.md"
@@ -29,15 +29,19 @@ dev = [
     "pytest>=8.3.0",
     "pytest-cov>=6.0.0",
     "mypy>=1.14.0",
+    "pandas>=2.2.0",
     "ruff>=0.8.0",
 ]
+data = ["pandas>=2.2.0"]
 visualization = [
     "matplotlib>=3.8.0",
 ]
+protocol = ["msgpack>=1.1.0"]
+server = ["websockets>=15.0"]
 torch = ["torch>=2.4.0"]
 mlx = ["mlx>=0.22.0"]
 jax = ["jax>=0.4.30", "jaxlib>=0.4.30"]
-all = ["world-model-kit[dev,visualization,torch,mlx,jax]"]
+all = ["scene-kit[data,dev,visualization,protocol,server,torch,mlx,jax]"]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -47,8 +51,12 @@ dev-dependencies = [
     "pytest>=8.3.0",
     "pytest-cov>=6.0.0",
     "mypy>=1.14.0",
+    "pandas>=2.2.0",
     "ruff>=0.8.0",
 ]
+
+[tool.uv.sources]
+relation-entity-component-system-kit = { path = "../relation-entity-component-system" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

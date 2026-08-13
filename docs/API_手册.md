@@ -1,13 +1,13 @@
-# world-model-kit API 手册
+# SceneKit API 手册（Scene Suite 伞形品牌 · 开源 SDK）
 
-> **版本**: 0.2.0 | **最后更新**: 2026-07-23
+> **版本**: 0.5.1 | **最后更新**: 2026-08-12
 
 ---
 
 ## WorldModel
 
 ```python
-from world_model_kit import WorldModel
+from scene_kit import WorldModel
 
 model = WorldModel(
     backend: str = "numpy",           # "numpy" | "torch" | "mlx" | "jax"
@@ -98,11 +98,12 @@ model = WorldModel(
 | `behaviors` | 属性 → BehaviorRegistry | 内置行为注册表 |
 | `collector` | 属性 → DataCollector | 数据采集器（延迟初始化） |
 
-### ViewModel 导出
+### Snapshot 导出
 
 | 方法 | 签名 | 说明 |
 |---|---|---|
-| `export_viewmodel` | `(format="json", viewport=None) -> bytes \| dict` | 导出当前 tick 快照 |
+| `export_snapshot` | `(projection=None, format="dict") -> dict \| bytes` | 导出固定 schema 的 RECS 风格 SoA 快照 |
+| `export_viewmodel` | `(format="json", viewport=None) -> bytes \| dict` | v0.2 AoS 兼容/调试视图 |
 | `export_dataframe` | `() -> pd.DataFrame` | 导出 DataCollector 记录 |
 
 ---
@@ -110,7 +111,7 @@ model = WorldModel(
 ## EntityKind
 
 ```python
-from world_model_kit import EntityKind
+from scene_kit import EntityKind
 
 EntityKind(
     name: str,                      # 类型名（必须）
@@ -128,7 +129,7 @@ EntityKind(
 ## Geometry（基类）
 
 ```python
-from world_model_kit.geometry import Geometry
+from scene_kit.geometry import Geometry
 
 class Geometry(ABC):
     dim: float
@@ -203,7 +204,7 @@ class WorldPlugin(ABC):
 ## Scheduler
 
 ```python
-from world_model_kit.schedule import (
+from scene_kit.schedule import (
     SchedulerBase,         # 抽象基类
     SequentialScheduler,   # 创建顺序（默认）
     RandomScheduler,       # 每 tick 随机 shuffle
@@ -228,24 +229,76 @@ from world_model_kit.schedule import (
 
 ---
 
-## ViewModel 导出
+## WorldSnapshot / WorldDelta
 
 ```python
-@dataclass
-class AgentViewModel:
-    id: int; kind: str
-    position: list[float]   # [u, v] 或 [u, v, w]
-    r: int; g: int; b: int; a: int
-    size: float; heading: float | None
+from scene_kit import SnapshotProjection
 
-@dataclass
-class WorldViewModel:
-    tick: int
-    agents: list[AgentViewModel]
-    metrics: dict[str, float]
-
-# 方法
-model.export_viewmodel(format="json", viewport=None)
-# format: "json" → bytes, "dict" → dict
-# viewport: 可选 {"u_min": ..., "u_max": ..., "v_min": ..., "v_max": ...}
+projection = SnapshotProjection(
+    kinds=("bird",),
+    columns=("u", "v", "r", "g", "b", "a"),
+    viewport={"u_min": 0, "u_max": 200, "v_min": 0, "v_max": 200},
+)
+snapshot = model.export_snapshot(projection, format="dict")
 ```
+
+快照的核心结构如下（字段名和列长度固定）：
+
+```json
+{
+  "protocol": "wmk.world-snapshot",
+  "protocolVersion": "1.0",
+  "snapshotId": "snapshot-1",
+  "tick": 0,
+  "entityBatches": {
+    "bird": {
+      "kind": "bird",
+      "geometry": "point",
+      "count": 2,
+      "schema": {"uid": {"dtype": "int64", "encoding": "decimal-string"}},
+      "columns": {"uid": ["7", "8"], "u": [12.4, 18.0], "v": [8.1, 20.0]}
+    }
+  },
+  "relationBatches": {},
+  "metrics": {}
+}
+```
+
+`WorldDelta` 使用 `baseSnapshotId` 和 `snapshotId`，在每个 kind 下表达 `removedUids`、`added` 和 `changed`。前端应以 `(kind, uid)` 作为实体引用，不应依赖批次中的数组索引。
+
+### SnapshotProjection
+
+| 字段 | 说明 |
+|---|---|
+| `kinds` | 仅导出指定 EntityKind；`None` 表示全部 |
+| `columns` | 所有 kind 共用的列序列，或 `{kind: columns}` 映射；`uid` 始终导出 |
+| `viewport` | `u_min/u_max/v_min/v_max` 视口过滤 |
+| `include_relations` | 是否预留关系批次（当前关系导出能力有限） |
+| `include_metrics` | 是否包含采集器指标 |
+| `include_world_coordinates` | 是否补充递归世界坐标列 |
+
+### ModelSession
+
+```python
+from scene_kit import ModelSession
+
+session = ModelSession(model, model_factory=lambda cfg: make_model(cfg), parameters={"seed": 42})
+session.dispatch({"type": "step", "payload": {"steps": 1}})
+snapshot = session.snapshot()
+```
+
+`dispatch()` 立即处理命令；`enqueue_command()` 将命令放到下一次 `advance()` 的 tick 边界执行。`next_message(prefer_delta=True)` 在有上一快照时返回 `WorldDelta`，否则返回完整快照。
+
+### WebSocketModelServer
+
+```python
+from scene_kit.transport import WebSocketModelServer
+
+server = WebSocketModelServer(session, host="127.0.0.1", port=8765)
+```
+
+安装 `scene-kit[server]` 后运行 `serve_forever()`。客户端消息为 `getSnapshot` 或 `command`；服务端 envelope 类型为 `hello`、`snapshot`、`delta`、`commandResult`、`error`。
+
+### 兼容接口
+
+`AgentViewModel`、`WorldViewModel` 和 `export_viewmodel()` 属于 v0.2 兼容层。新代码不要围绕 `agents` 对象数组设计；请使用 `EntityBatch` 的列式结构。
