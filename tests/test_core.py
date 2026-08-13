@@ -1,9 +1,9 @@
-"""world-model-kit v0.2.0 综合测试。"""
+"""scene-kit v0.4.0 综合测试。"""
 import numpy as np
 import pytest
-from world_model_kit import WorldModel, EntityKind, WorldPlugin
-from world_model_kit.geometry import PointGeometry, SurfaceGeometry, VolumeGeometry
-from world_model_kit.schedule import SequentialScheduler, RandomScheduler, PhaseScheduler
+from scene_kit import WorldModel, EntityKind, WorldPlugin
+from scene_kit.geometry import PointGeometry, SurfaceGeometry, VolumeGeometry
+from scene_kit.schedule import SequentialScheduler, RandomScheduler, PhaseScheduler
 
 def _make_2d_model():
     m = WorldModel(seed=42)
@@ -25,12 +25,12 @@ class TestEntityKind:
     def test_invalid_type(self):
         with pytest.raises(ValueError): EntityKind("bad", type="INVALID")
     def test_kind_to_dtypes_point(self):
-        from world_model_kit.entity_kind import _kind_to_dtypes
+        from scene_kit.entity_kind import _kind_to_dtypes
         d = _kind_to_dtypes(EntityKind("p", geometry="point", tags={"energy": np.float32}))
         assert "u" in d and "v" in d and "energy" in d and "_parent_id" in d
         assert "mass" in d and "r" in d and "g" in d
     def test_kind_to_dtypes_volume(self):
-        from world_model_kit.entity_kind import _kind_to_dtypes
+        from scene_kit.entity_kind import _kind_to_dtypes
         d = _kind_to_dtypes(EntityKind("v", geometry="volume"))
         assert "u" in d and "v" in d and "w" in d
 
