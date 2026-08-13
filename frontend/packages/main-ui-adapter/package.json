@@ -1,0 +1,16 @@
+{
+  "name": "@scene-kit/main-ui-adapter",
+  "version": "0.3.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {".": {"types": "./dist/index.d.ts", "import": "./dist/index.js"}},
+  "files": ["dist"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --external vue --external main-ui",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {"main-ui": "file:../../../../main-ui"},
+  "peerDependencies": {"vue": "^3.5.0"}
+}

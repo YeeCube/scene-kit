@@ -1,0 +1,16 @@
+{
+  "name": "@scene-kit/renderer-2d",
+  "version": "0.3.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {".": {"types": "./dist/index.d.ts", "import": "./dist/index.js"}},
+  "files": ["dist"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --external vue --external viewport-2d-kit",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {"@scene-kit/core": "workspace:*", "viewport-2d-kit": "file:../../../../viewport-2d-kit"},
+  "peerDependencies": {"vue": "^3.5.0"}
+}

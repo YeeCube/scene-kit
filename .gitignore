@@ -1105,3 +1105,16 @@ rust-project.json
 *.code-workspace
 
 
+# frontend/packages/ 是开源 SDK 的四个 npm 包（core/vue/renderer-2d/main-ui-adapter）
+# 上方的 SwiftPM 模板规则 "Packages" 会误忽略该目录，这里显式取消忽略
+!frontend/
+frontend/*
+!frontend/packages/
+frontend/packages/*
+!frontend/packages/core/
+!frontend/packages/vue/
+!frontend/packages/renderer-2d/
+!frontend/packages/main-ui-adapter/
+
+
+
