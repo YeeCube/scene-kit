@@ -117,3 +117,11 @@ def test_model_session_controls_and_uid_commands() -> None:
         }
     )
     assert not bad.accepted
+
+
+def test_model_session_can_edit_exposed_columns() -> None:
+    session = ModelSession(make_model())
+    uid = session.snapshot()["entityBatches"]["particle"]["columns"]["uid"][0]
+    result = session.dispatch({"type": "set_attribute", "payload": {"kind": "particle", "uids": [uid], "field": "u", "values": [9]}})
+    assert result.accepted
+    assert float(session.model.attr("particle", "u")[0]) == 9

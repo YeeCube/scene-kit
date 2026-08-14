@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from contextlib import suppress
+from collections.abc import Callable
 from typing import Any
 
 from scene_kit.runner import ModelSession
@@ -25,12 +26,14 @@ class WebSocketModelServer:
         port: int = 8765,
         push_hz: float = 10.0,
         prefer_delta: bool = False,
+        authorize: Callable[[Any, dict[str, Any]], bool] | None = None,
     ) -> None:
         self.session = session
         self.host = host
         self.port = int(port)
         self.push_hz = float(push_hz)
         self.prefer_delta = prefer_delta
+        self.authorize = authorize
         self._clients: set[Any] = set()
         self._stop = asyncio.Event()
 
@@ -48,6 +51,15 @@ class WebSocketModelServer:
         await websocket.send(self._envelope(message_type, message))
 
     async def _handler(self, websocket: Any) -> None:
+        if self.authorize is not None:
+            try:
+                allowed = self.authorize(websocket, dict(websocket.request.headers))
+            except Exception as exc:
+                await websocket.close(code=1011, reason=f"鉴权钩子异常: {exc}")
+                return
+            if not allowed:
+                await websocket.close(code=1008, reason="未授权的 WebSocket 连接")
+                return
         self._clients.add(websocket)
         try:
             await websocket.send(self._envelope("hello", self.session.describe()))
@@ -58,6 +70,8 @@ class WebSocketModelServer:
                     request_type = request.get("type")
                     if request_type == "getSnapshot":
                         await self._send_state(websocket)
+                    elif request_type == "ping":
+                        await websocket.send(self._envelope("pong", {"tick": self.session.model.tick}))
                     elif request_type == "command":
                         result = self.session.dispatch(request.get("payload", {}))
                         await websocket.send(self._envelope("commandResult", result.to_dict()))
@@ -102,7 +116,7 @@ class WebSocketModelServer:
             from websockets.asyncio.server import serve
         except ImportError as exc:  # pragma: no cover - optional dependency
             raise RuntimeError("启动 WebSocket 服务需要安装 scene-kit[server]") from exc
-        async with serve(self._handler, self.host, self.port):
+        async with serve(self._handler, self.host, self.port, ping_interval=20, ping_timeout=20):
             producer = asyncio.create_task(self._producer())
             try:
                 await self._stop.wait()
@@ -121,6 +135,11 @@ async def serve_session(
     host: str = "127.0.0.1",
     port: int = 8765,
     push_hz: float = 10.0,
+    prefer_delta: bool = False,
+    authorize: Callable[[Any, dict[str, Any]], bool] | None = None,
 ) -> None:
     """便捷入口：持续服务一个 ModelSession。"""
-    await WebSocketModelServer(session, host=host, port=port, push_hz=push_hz).serve_forever()
+    await WebSocketModelServer(
+        session, host=host, port=port, push_hz=push_hz,
+        prefer_delta=prefer_delta, authorize=authorize,
+    ).serve_forever()

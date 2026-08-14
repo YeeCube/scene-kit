@@ -1,7 +1,7 @@
 [project]
 name = "scene-kit"
-version = "0.5.1"
-description = "SceneKit · 场景工具包 v0.5.1 —— 基于 RECS SoA 的 Entity 场景建模、列式协议与交互式前端 SDK（开源）。Scene Suite 伞形品牌下的 SDK 层。"
+version = "0.6.0"
+description = "Scene Kit · 场景工具包 v0.6.0 —— 基于 RECS SoA 的 Entity 场景建模、列式协议与交互式前端 SDK。"
 requires-python = ">=3.13"
 authors = [
     {name = "scene-kit-team", email = "team@scene-kit.dev"}

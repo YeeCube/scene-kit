@@ -1,6 +1,20 @@
 # SceneKit API 手册（Scene Suite 伞形品牌 · 开源 SDK）
 
-> **版本**: 0.5.1 | **最后更新**: 2026-08-12
+> **版本**: 0.6.0 | **最后更新**: 2026-08-14
+
+## v0.6 交互会话 API
+
+`ModelSession` 是 Python 模型与界面的唯一可变状态边界。它接受 `play`、`pause`、`step`、`reset`、`set_rate`、`set_parameter`、`spawn`、`despawn`、`move`、`set_tag` 与 `set_attribute` 命令；命令结果均为 `CommandResult`。
+
+```python
+from scene_kit import ModelSession
+from scene_kit.transport import serve_session
+
+session = ModelSession(model, model_factory=create_model, parameters={"n_birds": 100})
+await serve_session(session, prefer_delta=True)
+```
+
+WebSocket envelope 为 `hello`、`snapshot`、`delta`、`commandResult`、`error`，另支持 `getSnapshot` 与 `ping` 请求。服务默认只绑定 `127.0.0.1`；如需接入网关，可向 `serve_session(..., authorize=...)` 提供鉴权钩子。
 
 ---
 

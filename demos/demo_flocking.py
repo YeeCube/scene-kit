@@ -83,7 +83,7 @@ def main() -> None:
     args = parser.parse_args()
     config = parse_config(args.set)
     if args.serve:
-        serve_demo(create_model, name="Boids 群集", config=config, host=args.host, port=args.port, rate=args.rate)
+        serve_demo(create_model, name="Boids 群集", config=config, host=args.host, port=args.port, rate=args.rate, prefer_delta=args.delta)
         return
 
     model = create_model(config)

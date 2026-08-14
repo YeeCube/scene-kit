@@ -13,14 +13,16 @@ export const WorldViewport2D = defineComponent({
   },
   emits: {
     select: (_value: EntityRef | null) => true,
+    move: (_ref: EntityRef, _delta: {x: number; y: number}) => true,
     cameraChange: (_value: unknown) => true,
   },
-  setup(props, {emit}) {
+  setup(props, {emit, expose}) {
     const viewport = ref<Viewport2DCanvasExpose>();
     const canvas = ref<HTMLCanvasElement>();
     let camera = {scale: 1, pan: {x: 0, y: 0}};
     let size = {width: 1, height: 1};
     let animationFrame = 0;
+    let drag: {ref: EntityRef; start: {x: number; y: number}; last: {x: number; y: number}} | undefined;
 
     const bounds = () => {
       const worldBounds = props.snapshot?.world.bounds;
@@ -52,11 +54,39 @@ export const WorldViewport2D = defineComponent({
     };
 
     const onClick = (event: MouseEvent) => {
+      if (drag) return;
       if (!props.snapshot || !viewport.value) return;
       const rect = (event.currentTarget as HTMLCanvasElement).getBoundingClientRect();
       const worldPoint = viewport.value.screenToWorld({x: event.clientX - rect.left, y: event.clientY - rect.top});
       emit('select', hitTestPointBatches(props.snapshot, worldPoint, 5 / Math.max(camera.scale, 0.001), props.styles, props.kinds));
     };
+
+    const worldPoint = (event: PointerEvent) => {
+      const rect = (event.currentTarget as HTMLCanvasElement).getBoundingClientRect();
+      return viewport.value!.screenToWorld({x: event.clientX - rect.left, y: event.clientY - rect.top});
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (!props.snapshot || !viewport.value || event.button !== 0) return;
+      const point = worldPoint(event);
+      const hit = hitTestPointBatches(props.snapshot, point, 5 / Math.max(camera.scale, 0.001), props.styles, props.kinds);
+      if (!hit) return;
+      drag = {ref: hit, start: point, last: point};
+      (event.currentTarget as HTMLCanvasElement).setPointerCapture(event.pointerId);
+      emit('select', hit);
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (!drag || !viewport.value) return;
+      drag.last = worldPoint(event);
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      if (!drag) return;
+      const current = drag;
+      drag = undefined;
+      const delta = {x: current.last.x - current.start.x, y: current.last.y - current.start.y};
+      if (Math.abs(delta.x) > 0.001 || Math.abs(delta.y) > 0.001) emit('move', current.ref, delta);
+    };
+
+    expose({exportPng: () => canvas.value?.toDataURL('image/png')});
 
     watch(() => [props.snapshot, props.selected, props.styles, props.kinds], () => void nextTick(draw), {deep: false});
     onBeforeUnmount(() => cancelAnimationFrame(animationFrame));
@@ -75,6 +105,9 @@ export const WorldViewport2D = defineComponent({
         class: 'wmk-world-viewport-2d__canvas',
         style: {position: 'absolute', inset: '0', width: '100%', height: '100%', cursor: 'crosshair'},
         onClick,
+        onPointerdown: onPointerDown,
+        onPointermove: onPointerMove,
+        onPointerup: onPointerUp,
       }),
     });
   },

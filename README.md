@@ -24,6 +24,13 @@ graph TB
     style B fill:#f2a900,color:#000
 ```
 
+## v0.6.0
+
+- 交互协议：`WorldSnapshot`/`WorldDelta`、msgpack、WebSocket 重连、心跳与可选鉴权钩子。
+- 运行时：`ModelSession` 支持运行、暂停、单步、重置及实体增删改移动。
+- 前端：core/vue/renderer-2d/main-ui-adapter 四包可独立以 `file:` 依赖被 Studio 消费。
+- 真实接入示例见 `docs/API_手册.md` 与 `docs/下游消费者集成指南.md`。
+
 ## v0.5.1
 
 - **品牌终局**：伞形品牌调整为 **Scene Suite**（场景套件），应用仓库 `scene-sandbox` → **`scene-studio`**（场景工作室，闭源）。对齐 autodo 系列命名：suite 伞形 + kit SDK + studio/app 应用。

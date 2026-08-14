@@ -63,6 +63,7 @@ class ModelSession:
                 "spawn",
                 "despawn",
                 "move",
+                "set_attribute",
                 "set_tag",
             ],
             "snapshot": True,
@@ -139,6 +140,17 @@ class ModelSession:
         uids = raw if isinstance(raw, np.ndarray) else pool.backend.to_numpy(raw)
         return {"entities": [{"kind": kind, "uid": str(int(uid))} for uid in np.asarray(uids)]}
 
+    def _set_attribute(self, payload: Mapping[str, Any]) -> None:
+        kind = str(payload["kind"])
+        field = str(payload["field"])
+        if field in {"i", "o", "_kind", "_active", "_step_fn", "_parent_id", "_type"} or field.startswith("_"):
+            raise ValueError(f"'{field}' 不是可编辑属性")
+        pool = self.model.get_pool(kind)
+        if field not in pool.d:
+            raise ValueError(f"'{field}' 不存在于 {kind}")
+        indices = self._indices_for_uids(kind, payload.get("uids", []))
+        self.model.set_attr(kind, field, indices, payload.get("values"))
+
     def _apply_command(self, command: WorldCommand) -> CommandResult:
         try:
             data: dict[str, Any] = {}
@@ -182,6 +194,8 @@ class ModelSession:
                 kind = str(payload["kind"])
                 indices = self._indices_for_uids(kind, payload.get("uids", []))
                 self.model.move(kind, indices, np.asarray(payload["delta"], dtype=np.float32))
+            elif command.type == "set_attribute":
+                self._set_attribute(payload)
             elif command.type == "set_tag":
                 kind = str(payload["kind"])
                 field = str(payload["field"])

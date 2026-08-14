@@ -1,6 +1,6 @@
 {
   "name": "@scene-kit/vue",
-  "version": "0.3.0",
+  "version": "0.6.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -11,6 +11,6 @@
     "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --external vue",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "dependencies": {"@scene-kit/core": "workspace:*"},
+  "dependencies": {"@scene-kit/core": "file:../core"},
   "peerDependencies": {"vue": "^3.5.0"}
 }

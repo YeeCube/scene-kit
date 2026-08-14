@@ -19,6 +19,7 @@ def demo_parser(description: str, *, default_ticks: int) -> argparse.ArgumentPar
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--rate", type=float, default=10.0, help="交互会话每秒 tick 数")
+    parser.add_argument("--delta", action="store_true", help="优先推送增量协议（客户端自动回退快照）")
     parser.add_argument(
         "--set",
         action="append",
@@ -50,6 +51,7 @@ def serve_demo(
     host: str,
     port: int,
     rate: float,
+    prefer_delta: bool = False,
 ) -> None:
     session = ModelSession(
         create_model(config),
@@ -59,7 +61,7 @@ def serve_demo(
     )
     session.rate = rate
     print(f"{name}: ws://{host}:{port}（在 frontend 运行 pnpm dev 后连接）")
-    asyncio.run(serve_session(session, host=host, port=port, push_hz=rate))
+    asyncio.run(serve_session(session, host=host, port=port, push_hz=rate, prefer_delta=prefer_delta))
 
 
 def snapshot_entity_count(model: WorldModel) -> int:

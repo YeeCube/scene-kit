@@ -19,6 +19,7 @@ export type WorldModelCommands = Readonly<{
   spawn(kind: string, count: number, attributes?: Readonly<Record<string, unknown>>): Promise<CommandResult>;
   despawn(refs: readonly EntityRef[]): Promise<CommandResult>;
   move(refs: readonly EntityRef[], delta: readonly number[] | readonly (readonly number[])[]): Promise<CommandResult>;
+  setAttribute(refs: readonly EntityRef[], field: string, values: unknown): Promise<CommandResult>;
   setTag(refs: readonly EntityRef[], field: string, values: unknown): Promise<CommandResult>;
 }>;
 

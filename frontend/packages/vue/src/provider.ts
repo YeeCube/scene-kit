@@ -30,13 +30,17 @@ export const WorldModelProvider = defineComponent({
       reset: () => dispatch('reset'),
       setRate: (rate) => dispatch('set_rate', {rate}),
       setParameter: (name, value) => dispatch('set_parameter', {name, value}),
-      spawn: (kind, count, attributes = {}) => dispatch('spawn', {kind, n: count, attributes}),
+      spawn: (kind, count, attributes = {}) => dispatch('spawn', {kind, n: count, attrs: attributes}),
       async despawn(refs) {
         const results = await Promise.all([...groupRefs(refs)].map(([kind, uids]) => dispatch('despawn', {kind, uids})));
         return results.at(-1)!;
       },
       async move(refs, delta) {
         const results = await Promise.all([...groupRefs(refs)].map(([kind, uids]) => dispatch('move', {kind, uids, delta})));
+        return results.at(-1)!;
+      },
+      async setAttribute(refs, field, values) {
+        const results = await Promise.all([...groupRefs(refs)].map(([kind, uids]) => dispatch('set_attribute', {kind, uids, field, values})));
         return results.at(-1)!;
       },
       async setTag(refs, field, values) {

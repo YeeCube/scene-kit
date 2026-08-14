@@ -32,6 +32,9 @@ export class WebSocketBridge extends BaseBridge implements WorldModelBridge {
   private socket?: WebSocket;
   private snapshot?: WorldSnapshot;
   private readonly pending = new Map<string, {resolve: (value: CommandResult) => void; reject: (reason: unknown) => void}>();
+  private reconnectTimer?: ReturnType<typeof setTimeout>;
+  private reconnectAttempt = 0;
+  private intentionalClose = false;
 
   constructor(readonly url: string, private readonly protocols?: string | string[]) {
     super();
@@ -39,11 +42,13 @@ export class WebSocketBridge extends BaseBridge implements WorldModelBridge {
 
   connect(): Promise<void> {
     if (this.socket?.readyState === WebSocket.OPEN) return Promise.resolve();
+    this.intentionalClose = false;
     this.emit({type: 'connection', state: 'connecting'});
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(this.url, this.protocols);
       this.socket = socket;
       socket.addEventListener('open', () => {
+        this.reconnectAttempt = 0;
         this.emit({type: 'connection', state: 'connected'});
         resolve();
       }, {once: true});
@@ -58,13 +63,25 @@ export class WebSocketBridge extends BaseBridge implements WorldModelBridge {
         this.emit({type: 'connection', state: 'disconnected'});
         for (const request of this.pending.values()) request.reject(new Error('WebSocket disconnected'));
         this.pending.clear();
+        if (!this.intentionalClose) this.scheduleReconnect();
       });
     });
   }
 
   disconnect(): void {
+    this.intentionalClose = true;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.socket?.close();
     this.socket = undefined;
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer) return;
+    const delay = Math.min(5_000, 250 * 2 ** this.reconnectAttempt++);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = undefined;
+      void this.connect().catch(() => undefined);
+    }, delay);
   }
 
   requestSnapshot(): void {
