@@ -29,6 +29,7 @@
 ### Added
 
 - **关系登记与投影（M1）**：`WorldModel.bind / unbind / relations()` 命名边表 API（RECS `Relation`，(srcUid,dstUid) 去重）；`WorldSnapshot.relationBatches` 首次落地列式投影（`{name, srcKind, dstKind, count, schema, columns}`，`SnapshotProjection.include_relations` 生效）；`diff_snapshots` 输出关系 added/removed/changed 增量；快照校验新增 relation batch 结构校验（uid 字符串编码 + 边唯一性）。
+- `demos/demo_tactics.py`：足球战术草稿盘（22 球员 + 球，M3 战术板验收场景，教练剧本「排兵—推演—表达」）。
 - `@scene-kit/vue` 命令面扩展：select/clearSelection/getSelection/batchMove/batchSetAttribute/bindRelation/unbindRelation/snapToSlots；新增 `demos/demo_checkers.py`（跳棋草稿盘，逻辑吸附验收场景）。
 - 架构决策记录（ADR）按目录纪律迁往笔记库（Engs_notebook/Projects/场景工坊/notes/），仓库不再存放：ADR-001《架构设计与ABM边界》、ADR-002《世界线批处理与吸附语义》（accepted）。
 - **SelectionSet 与批处理命令（M2，ADR-002 D2）**：`ModelSession` 新增 `select`（按 uids 或 rect 框选，replace/add/remove 模式）、`clear_selection`、`get_selection`、`batch_move`、`batch_set_attribute`（对选择集扇出，封闭宏集合）。选择集是会话态，不进快照。
