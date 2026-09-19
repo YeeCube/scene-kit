@@ -1,4 +1,4 @@
-"""WorldPlugin —— WMK 插件基类。
+"""WorldPlugin —— Scene Kit 插件基类。
 
 类似 Bevy 的 Plugin trait。子类重写 register_* 方法封装领域逻辑。
 """
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 class WorldPlugin(ABC):
-    """WMK 插件基类。
+    """Scene Kit 插件基类。
 
     子类重写四个 register_* 钩子来封装领域逻辑：
     - register_kinds: 注册 EntityKind

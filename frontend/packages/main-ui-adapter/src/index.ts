@@ -15,7 +15,7 @@ export type RegisterWorldModelOptions = Readonly<{
   title?: string;
 }>;
 
-/** Register WMK as a consumer-owned editor. This function never creates a main-ui runtime. */
+/** Register Scene Kit as a consumer-owned editor. This function never creates a main-ui runtime. */
 export function registerWorldModelMainUi(runtime: MainUiRuntime, options: RegisterWorldModelOptions): MainUiRuntime {
   const title = options.title ?? 'World Model Studio';
   runtime.core.registerEditor({

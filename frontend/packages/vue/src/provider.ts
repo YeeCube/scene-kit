@@ -78,6 +78,6 @@ export const WorldModelProvider = defineComponent({
       unsubscribe();
       props.bridge.disconnect();
     });
-    return () => h('div', {class: 'wmk-provider'}, slots.default?.());
+    return () => h('div', {class: 'sk-provider'}, slots.default?.());
   },
 });
