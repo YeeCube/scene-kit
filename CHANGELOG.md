@@ -29,13 +29,15 @@
 ### Added
 
 - **关系登记与投影（M1）**：`WorldModel.bind / unbind / relations()` 命名边表 API（RECS `Relation`，(srcUid,dstUid) 去重）；`WorldSnapshot.relationBatches` 首次落地列式投影（`{name, srcKind, dstKind, count, schema, columns}`，`SnapshotProjection.include_relations` 生效）；`diff_snapshots` 输出关系 added/removed/changed 增量；快照校验新增 relation batch 结构校验（uid 字符串编码 + 边唯一性）。
+- `@scene-kit/vue` 命令面扩展：select/clearSelection/getSelection/batchMove/batchSetAttribute/bindRelation/unbindRelation/snapToSlots；新增 `demos/demo_checkers.py`（跳棋草稿盘，逻辑吸附验收场景）。
 - 架构决策：`adr/ADR-002-世界线批处理与吸附语义.md`（accepted，内部决策记录，不在公开 docs 区）——世界线 DAG、SelectionSet 批处理、逻辑吸附、Always-On、AI 边界契约。
 - **SelectionSet 与批处理命令（M2，ADR-002 D2）**：`ModelSession` 新增 `select`（按 uids 或 rect 框选，replace/add/remove 模式）、`clear_selection`、`get_selection`、`batch_move`、`batch_set_attribute`（对选择集扇出，封闭宏集合）。选择集是会话态，不进快照。
+- **TS 关系增量应用（M2）**：`applyWorldDelta` 支持 relationBatches 增量（added/removedEdges/changed），delta 通道下关系实时到达前端。
 - **关系命令与逻辑吸附（M2，ADR-002 D3）**：新增 `bind_relation` / `unbind_relation` / `snap_to_slots`（半径内最近落点，对齐坐标并生成 `is_on` 关系边；未传 uids 时作用于选择集）。`despawn` 级联 unbind 出入边并修剪选择集（清偿 M1 悬空边限制）。
 
 ### Changed
 
-- **协议命名空间**：`wmk.world-snapshot` / `wmk.world-delta` → `scene-kit.world-snapshot` / `scene-kit.world-delta`，`protocolVersion` 1.0 → 1.1（Python 与 `@scene-kit/core`、SA fixture 同步）。已知限制：实体 kill 不自动级联 unbind（悬空边原样导出），M2 在命令层清偿；TS 侧关系增量应用留 M2。
+- **协议命名空间**：`wmk.world-snapshot` / `wmk.world-delta` → `scene-kit.world-snapshot` / `scene-kit.world-delta`，`protocolVersion` 1.0 → 1.1（Python 与 `@scene-kit/core`、SA fixture 同步）。已知限制：实体 kill 不自动级联 unbind（悬空边原样导出），M2 已在命令层清偿（despawn 级联 unbind）。
 
 ---
 

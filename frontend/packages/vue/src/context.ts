@@ -9,6 +9,13 @@ import type {
 } from '@scene-kit/core';
 import type {ComputedRef, InjectionKey, Ref, ShallowRef} from 'vue';
 
+export type SelectionRect = Readonly<{u_min?: number; u_max?: number; v_min?: number; v_max?: number}>;
+
+export type SnapResult = Readonly<{
+  snapped: ReadonlyArray<Readonly<{uid: string; slotUid: string}>>;
+  skipped: readonly string[];
+}>;
+
 export type WorldModelCommands = Readonly<{
   play(): Promise<CommandResult>;
   pause(): Promise<CommandResult>;
@@ -21,6 +28,14 @@ export type WorldModelCommands = Readonly<{
   move(refs: readonly EntityRef[], delta: readonly number[] | readonly (readonly number[])[]): Promise<CommandResult>;
   setAttribute(refs: readonly EntityRef[], field: string, values: unknown): Promise<CommandResult>;
   setTag(refs: readonly EntityRef[], field: string, values: unknown): Promise<CommandResult>;
+  select(kind: string, target: Readonly<{uids?: readonly string[]; rect?: SelectionRect; mode?: 'replace' | 'add' | 'remove'}>): Promise<CommandResult>;
+  clearSelection(): Promise<CommandResult>;
+  getSelection(): Promise<CommandResult>;
+  batchMove(delta: readonly number[], kinds?: readonly string[]): Promise<CommandResult>;
+  batchSetAttribute(field: string, value: unknown, kinds?: readonly string[]): Promise<CommandResult>;
+  bindRelation(name: string, srcKind: string, dstKind: string, srcUids: readonly string[], dstUids: readonly string[], attrs?: Readonly<Record<string, unknown>>): Promise<CommandResult>;
+  unbindRelation(name: string, endpoints?: Readonly<{srcUids?: readonly string[]; dstUids?: readonly string[]}>): Promise<CommandResult>;
+  snapToSlots(kind: string, slotKind: string, options?: Readonly<{radius?: number; relation?: string; align?: boolean; uids?: readonly string[]}>): Promise<CommandResult>;
 }>;
 
 export type WorldModelContext = Readonly<{

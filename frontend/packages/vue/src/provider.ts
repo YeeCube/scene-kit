@@ -47,6 +47,15 @@ export const WorldModelProvider = defineComponent({
         const results = await Promise.all([...groupRefs(refs)].map(([kind, uids]) => dispatch('set_tag', {kind, uids, field, values})));
         return results.at(-1)!;
       },
+      select: (kind, target) => dispatch('select', {kind, ...target}),
+      clearSelection: () => dispatch('clear_selection'),
+      getSelection: () => dispatch('get_selection'),
+      batchMove: (delta, kinds) => dispatch('batch_move', {delta, ...(kinds ? {kinds} : {})}),
+      batchSetAttribute: (field, value, kinds) => dispatch('batch_set_attribute', {field, value, ...(kinds ? {kinds} : {})}),
+      bindRelation: (name, srcKind, dstKind, srcUids, dstUids, attrs) =>
+        dispatch('bind_relation', {name, srcKind, dstKind, srcUids, dstUids, ...(attrs ? {attrs} : {})}),
+      unbindRelation: (name, endpoints) => dispatch('unbind_relation', {name, ...(endpoints ?? {})}),
+      snapToSlots: (kind, slotKind, options) => dispatch('snap_to_slots', {kind, slotKind, ...(options ?? {})}),
     };
 
     const onEvent = (event: BridgeEvent) => {
