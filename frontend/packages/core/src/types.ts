@@ -1,6 +1,6 @@
-export const SNAPSHOT_PROTOCOL = 'wmk.world-snapshot' as const;
-export const DELTA_PROTOCOL = 'wmk.world-delta' as const;
-export const PROTOCOL_VERSION = '1.0' as const;
+export const SNAPSHOT_PROTOCOL = 'scene-kit.world-snapshot' as const;
+export const DELTA_PROTOCOL = 'scene-kit.world-delta' as const;
+export const PROTOCOL_VERSION = '1.1' as const;
 
 export type EntityUid = string;
 
@@ -33,6 +33,8 @@ export type EntityBatch = Readonly<{
 
 export type RelationBatch = Readonly<{
   name: string;
+  srcKind?: string;
+  dstKind?: string;
   count: number;
   schema: Readonly<Record<string, ColumnSchema>>;
   columns: Readonly<Record<string, Column>>;

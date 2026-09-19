@@ -106,6 +106,54 @@ def _parent_uid_column(model: "WorldModel", kind: str, indices: np.ndarray) -> l
     return result
 
 
+def _relation_batches(
+    model: "WorldModel", kinds: list[str], projection: SnapshotProjection
+) -> dict[str, Any]:
+    """把命名关系边表投影为列式 relationBatches（uid 十进制字符串编码）。"""
+    batches: dict[str, Any] = {}
+    if not projection.include_relations:
+        return batches
+    allowed = set(kinds)
+    for name, record in model._relations.items():
+        if record["srcKind"] not in allowed or record["dstKind"] not in allowed:
+            continue
+        rel = record["rel"]
+        size = rel.size
+        src_uids = np.asarray(rel.get_attr("src_uid")[:size], dtype=np.int64)
+        dst_uids = np.asarray(rel.get_attr("dst_uid")[:size], dtype=np.int64)
+        columns: dict[str, list[Any]] = {
+            "srcUid": [str(int(value)) for value in src_uids],
+            "dstUid": [str(int(value)) for value in dst_uids],
+        }
+        schema: dict[str, dict[str, Any]] = {
+            "srcUid": {
+                "dtype": "int64",
+                "semantic": "edge-src-uid",
+                "encoding": "decimal-string",
+            },
+            "dstUid": {
+                "dtype": "int64",
+                "semantic": "edge-dst-uid",
+                "encoding": "decimal-string",
+            },
+        }
+        for attr_name in rel.d:
+            if attr_name in {"src_uid", "dst_uid"}:
+                continue
+            values = np.asarray(rel.get_attr(attr_name)[:size])
+            columns[attr_name] = _native_column(values)
+            schema[attr_name] = _schema_for(values)
+        batches[name] = {
+            "name": name,
+            "srcKind": record["srcKind"],
+            "dstKind": record["dstKind"],
+            "count": size,
+            "schema": schema,
+            "columns": columns,
+        }
+    return batches
+
+
 def build_snapshot(
     model: "WorldModel",
     projection: SnapshotProjection | Mapping[str, Any] | None = None,
@@ -182,7 +230,7 @@ def build_snapshot(
         "time": float(model.tick),
         "world": _world_metadata(model),
         "entityBatches": entity_batches,
-        "relationBatches": {},
+        "relationBatches": _relation_batches(model, kinds, spec),
         "metrics": metrics,
     }
     validate_snapshot(snapshot)

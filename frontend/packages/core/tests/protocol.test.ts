@@ -2,7 +2,7 @@ import {describe, expect, it} from 'vitest';
 import {applyWorldDelta, parseSnapshot, selectEntity, type WorldDelta, type WorldSnapshot} from '../src';
 
 const snapshot: WorldSnapshot = {
-  protocol: 'wmk.world-snapshot', protocolVersion: '1.0', snapshotId: 's1', tick: 1, time: 1,
+  protocol: 'scene-kit.world-snapshot', protocolVersion: '1.1', snapshotId: 's1', tick: 1, time: 1,
   world: {dimensions: 2, coordinateSystem: 'root-parametric', bounds: {u: [0, 10], v: [0, 10]}},
   entityBatches: {bird: {kind: 'bird', geometry: 'point', dim: 0, role: 'AGENT', parentKind: null, count: 2,
     schema: {uid: {dtype: 'int64'}, u: {dtype: 'float32'}}, columns: {uid: ['9007199254740993', '8'], u: [1, 2]}}},
@@ -16,7 +16,7 @@ describe('protocol', () => {
   });
 
   it('applies columnar delta', () => {
-    const delta: WorldDelta = {protocol: 'wmk.world-delta', protocolVersion: '1.0', baseSnapshotId: 's1', snapshotId: 's2', tick: 2, time: 2,
+    const delta: WorldDelta = {protocol: 'scene-kit.world-delta', protocolVersion: '1.1', baseSnapshotId: 's1', snapshotId: 's2', tick: 2, time: 2,
       world: snapshot.world, relationBatches: {}, metrics: {}, entityBatches: {bird: {removedUids: ['9007199254740993'], added: null,
         changed: {uids: ['8'], columns: {u: [7]}}}}};
     const next = applyWorldDelta(snapshot, delta);

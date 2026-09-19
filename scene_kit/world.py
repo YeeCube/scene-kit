@@ -108,6 +108,8 @@ class WorldModel:
         self._resources: dict[type, Any] = {}
         self._collector = None
         self._snapshot_sequence: int = 0
+        # 命名关系边表：name -> {srcKind, dstKind, rel: recs.Relation}
+        self._relations: dict[str, dict[str, Any]] = {}
 
         if seed is not None:
             np.random.seed(seed)
@@ -660,6 +662,109 @@ class WorldModel:
     def get_resource(self, resource_type: type) -> Any:
         """获取全局资源。"""
         return self._resources.get(resource_type)
+
+    # ==================================================================
+    # 关系登记（命名边表，uid 主键）
+    # ==================================================================
+
+    def bind(
+        self,
+        name: str,
+        src_kind: str,
+        dst_kind: str,
+        src_uids,
+        dst_uids,
+        **attrs,
+    ) -> int:
+        """登记一批有向关系边（按 (srcUid, dstUid) 边身份去重）。
+
+        Args:
+            name: 关系名（如 ``is_on``）。
+            src_kind / dst_kind: 两端的 Entity kind 名。
+            src_uids / dst_uids: 端点 uid（标量或数组，长度须一致）。
+            **attrs: 边属性列，标量自动广播。
+
+        Returns:
+            int: 该关系登记后的总边数。
+        """
+        from recs import Relation
+
+        for kind in (src_kind, dst_kind):
+            if kind not in self._kind_defs:
+                raise KeyError(f"EntityKind '{kind}' 未注册。")
+        src = np.asarray(src_uids, dtype=np.int64).reshape(-1)
+        dst = np.asarray(dst_uids, dtype=np.int64).reshape(-1)
+        if src.shape != dst.shape:
+            raise ValueError("src_uids 与 dst_uids 数量必须一致。")
+        record = self._relations.get(name)
+        if record is None:
+            record = {
+                "srcKind": src_kind,
+                "dstKind": dst_kind,
+                "rel": Relation(name, capacity=max(8, 2 * src.size)),
+            }
+            self._relations[name] = record
+        elif record["srcKind"] != src_kind or record["dstKind"] != dst_kind:
+            raise ValueError(
+                f"Relation '{name}' 已绑定 ({record['srcKind']} -> {record['dstKind']})。"
+            )
+        rel = record["rel"]
+        if rel.size:
+            existing = set(
+                zip(
+                    np.asarray(rel.get_attr("src_uid")[: rel.size]).tolist(),
+                    np.asarray(rel.get_attr("dst_uid")[: rel.size]).tolist(),
+                )
+            )
+            fresh = np.asarray(
+                [(s, d) not in existing for s, d in zip(src.tolist(), dst.tolist())],
+                dtype=bool,
+            )
+        else:
+            fresh = np.ones(src.shape, dtype=bool)
+        if fresh.any():
+            add_attrs = {
+                key: np.broadcast_to(np.asarray(value), src.shape)[fresh]
+                for key, value in attrs.items()
+            }
+            rel.add(src[fresh], dst[fresh], **add_attrs)
+        return rel.size
+
+    def unbind(self, name: str, src_uids=None, dst_uids=None) -> int:
+        """按 uid 删除关系边（端点可指定其一或两端）。返回剩余边数。"""
+        record = self._relations.get(name)
+        if record is None:
+            raise KeyError(f"Relation '{name}' 不存在。")
+        rel = record["rel"]
+        if rel.size == 0:
+            return 0
+        if src_uids is None and dst_uids is None:
+            raise ValueError("src_uids 与 dst_uids 至少给出一个。")
+        drop = np.zeros(rel.size, dtype=bool)
+        if src_uids is not None:
+            drop |= np.isin(
+                np.asarray(rel.get_attr("src_uid")[: rel.size], dtype=np.int64),
+                np.asarray(src_uids, dtype=np.int64).reshape(-1),
+            )
+        if dst_uids is not None:
+            drop |= np.isin(
+                np.asarray(rel.get_attr("dst_uid")[: rel.size], dtype=np.int64),
+                np.asarray(dst_uids, dtype=np.int64).reshape(-1),
+            )
+        if drop.any():
+            rel.remove_by_mask(drop)
+        return rel.size
+
+    def relations(self) -> dict[str, dict[str, Any]]:
+        """已登记关系概览：name -> {srcKind, dstKind, count}。"""
+        return {
+            name: {
+                "srcKind": record["srcKind"],
+                "dstKind": record["dstKind"],
+                "count": record["rel"].size,
+            }
+            for name, record in self._relations.items()
+        }
 
     # ==================================================================
     # SoA Snapshot / 兼容 ViewModel 导出

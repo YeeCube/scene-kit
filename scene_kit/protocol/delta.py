@@ -4,8 +4,89 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from scene_kit.protocol.types import PROTOCOL_VERSION, WorldDelta, WorldSnapshot
+from scene_kit.protocol.types import (
+    DELTA_PROTOCOL_NAME,
+    PROTOCOL_VERSION,
+    WorldDelta,
+    WorldSnapshot,
+)
 from scene_kit.protocol.validation import validate_snapshot
+
+
+def _edge_pairs(batch: Mapping[str, Any]) -> list[tuple[str, str]]:
+    columns = batch["columns"]
+    return list(zip(columns["srcUid"], columns["dstUid"]))
+
+
+def _diff_relations(
+    previous: WorldSnapshot, current: WorldSnapshot
+) -> dict[str, Any]:
+    """按关系名与 (srcUid, dstUid) 边身份计算 added/removed/changed。"""
+    previous_batches = previous.get("relationBatches", {})
+    current_batches = current.get("relationBatches", {})
+    changes: dict[str, Any] = {}
+    for name in sorted(set(previous_batches) | set(current_batches)):
+        before = previous_batches.get(name)
+        after = current_batches.get(name)
+        if before is None:
+            changes[name] = {
+                "removedEdges": [],
+                "added": after,
+                "changed": {"edges": [], "columns": {}},
+            }
+            continue
+        if after is None:
+            changes[name] = {
+                "removedEdges": [list(edge) for edge in _edge_pairs(before)],
+                "added": None,
+                "changed": {"edges": [], "columns": {}},
+            }
+            continue
+        before_edges = _edge_pairs(before)
+        after_edges = _edge_pairs(after)
+        before_index = {edge: i for i, edge in enumerate(before_edges)}
+        after_index = {edge: i for i, edge in enumerate(after_edges)}
+        added_edges = [edge for edge in after_edges if edge not in before_index]
+        removed_edges = [edge for edge in before_edges if edge not in after_index]
+        comparable = sorted(
+            (set(before["columns"]) & set(after["columns"])) - {"srcUid", "dstUid"}
+        )
+        changed_edges = [
+            edge
+            for edge in after_edges
+            if edge in before_index
+            and any(
+                before["columns"][column][before_index[edge]]
+                != after["columns"][column][after_index[edge]]
+                for column in comparable
+            )
+        ]
+        if not (added_edges or removed_edges or changed_edges):
+            continue
+        added = None
+        if added_edges:
+            positions = [after_index[edge] for edge in added_edges]
+            added = {
+                **{k: v for k, v in after.items() if k not in {"count", "columns"}},
+                "count": len(positions),
+                "columns": {
+                    column: [values[i] for i in positions]
+                    for column, values in after["columns"].items()
+                },
+            }
+        changed_columns = {
+            column: [after["columns"][column][after_index[edge]] for edge in changed_edges]
+            for column in comparable
+        }
+        changes[name] = {
+            "removedEdges": [list(edge) for edge in removed_edges],
+            "added": added,
+            "changed": {
+                "edges": [list(edge) for edge in changed_edges],
+                "columns": changed_columns,
+            },
+        }
+    return changes
 
 
 def _rows(columns: Mapping[str, list[Any]], indices: list[int]) -> dict[str, list[Any]]:
@@ -79,7 +160,7 @@ def diff_snapshots(previous: WorldSnapshot, current: WorldSnapshot) -> WorldDelt
             }
 
     return {
-        "protocol": "wmk.world-delta",
+        "protocol": DELTA_PROTOCOL_NAME,
         "protocolVersion": PROTOCOL_VERSION,
         "baseSnapshotId": previous["snapshotId"],
         "snapshotId": current["snapshotId"],
@@ -87,6 +168,6 @@ def diff_snapshots(previous: WorldSnapshot, current: WorldSnapshot) -> WorldDelt
         "time": current.get("time"),
         "world": current.get("world", {}),
         "entityBatches": changes,
-        "relationBatches": {},
+        "relationBatches": _diff_relations(previous, current),
         "metrics": current.get("metrics", {}),
     }

@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from scene_kit.protocol.types import PROTOCOL_NAME, PROTOCOL_VERSION
+from scene_kit.protocol.types import (
+    DELTA_PROTOCOL_NAME,
+    PROTOCOL_NAME,
+    PROTOCOL_VERSION,
+)
 
 
 class ProtocolValidationError(ValueError):
-    """协议结构不满足 WMK schema。"""
+    """协议结构不满足 Scene Kit schema。"""
 
 
 def _validate_batch(name: str, batch: Mapping[str, Any]) -> None:
@@ -36,6 +40,35 @@ def _validate_batch(name: str, batch: Mapping[str, Any]) -> None:
         raise ProtocolValidationError(f"entity batch '{name}' 的 uid 不唯一")
 
 
+def _validate_relation_batch(name: str, batch: Mapping[str, Any]) -> None:
+    count = batch.get("count")
+    if not isinstance(count, int) or count < 0:
+        raise ProtocolValidationError(f"relation batch '{name}' 的 count 必须是非负整数")
+    columns = batch.get("columns")
+    if not isinstance(columns, Mapping):
+        raise ProtocolValidationError(f"relation batch '{name}' 缺少 columns")
+    for column_name, values in columns.items():
+        if not isinstance(values, list):
+            raise ProtocolValidationError(
+                f"relation batch '{name}' 的列 '{column_name}' 必须是 list"
+            )
+        if len(values) != count:
+            raise ProtocolValidationError(
+                f"relation batch '{name}' 的列 '{column_name}' 长度 {len(values)} != count {count}"
+            )
+    for endpoint in ("srcUid", "dstUid"):
+        uids = columns.get(endpoint)
+        if uids is None:
+            raise ProtocolValidationError(f"relation batch '{name}' 缺少 {endpoint} 列")
+        if any(not isinstance(uid, str) for uid in uids):
+            raise ProtocolValidationError(
+                f"relation batch '{name}' 的 {endpoint} 必须使用字符串编码"
+            )
+    edges = list(zip(columns["srcUid"], columns["dstUid"]))
+    if len(set(edges)) != len(edges):
+        raise ProtocolValidationError(f"relation batch '{name}' 的边 (srcUid, dstUid) 不唯一")
+
+
 def validate_snapshot(snapshot: Mapping[str, Any]) -> None:
     """校验快照 envelope 与所有列长度。成功时返回 None。"""
     if snapshot.get("protocol") != PROTOCOL_NAME:
@@ -51,11 +84,18 @@ def validate_snapshot(snapshot: Mapping[str, Any]) -> None:
         if not isinstance(batch, Mapping):
             raise ProtocolValidationError(f"batch '{name}' 必须是对象")
         _validate_batch(str(name), batch)
+    relation_batches = snapshot.get("relationBatches")
+    if not isinstance(relation_batches, Mapping):
+        raise ProtocolValidationError("relationBatches 必须是对象")
+    for name, batch in relation_batches.items():
+        if not isinstance(batch, Mapping):
+            raise ProtocolValidationError(f"relation batch '{name}' 必须是对象")
+        _validate_relation_batch(str(name), batch)
 
 
 def validate_delta(delta: Mapping[str, Any]) -> None:
     """校验 WorldDelta 的基础 envelope。"""
-    if delta.get("protocol") != "wmk.world-delta":
+    if delta.get("protocol") != DELTA_PROTOCOL_NAME:
         raise ProtocolValidationError("未知的 delta protocol")
     if delta.get("protocolVersion") != PROTOCOL_VERSION:
         raise ProtocolValidationError("不支持的 delta protocolVersion")

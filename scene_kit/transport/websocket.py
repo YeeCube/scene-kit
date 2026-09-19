@@ -8,6 +8,7 @@ from contextlib import suppress
 from collections.abc import Callable
 from typing import Any
 
+from scene_kit.protocol.types import DELTA_PROTOCOL_NAME
 from scene_kit.runner import ModelSession
 
 
@@ -47,7 +48,7 @@ class WebSocketModelServer:
 
     async def _send_state(self, websocket: Any, *, prefer_delta: bool = False) -> None:
         message = self.session.next_message(prefer_delta=prefer_delta)
-        message_type = "delta" if message.get("protocol") == "wmk.world-delta" else "snapshot"
+        message_type = "delta" if message.get("protocol") == DELTA_PROTOCOL_NAME else "snapshot"
         await websocket.send(self._envelope(message_type, message))
 
     async def _handler(self, websocket: Any) -> None:
@@ -87,7 +88,7 @@ class WebSocketModelServer:
         if not self._clients:
             return
         message = self.session.next_message(prefer_delta=self.prefer_delta)
-        message_type = "delta" if message.get("protocol") == "wmk.world-delta" else "snapshot"
+        message_type = "delta" if message.get("protocol") == DELTA_PROTOCOL_NAME else "snapshot"
         encoded = self._envelope(message_type, message)
         stale: list[Any] = []
         for client in tuple(self._clients):

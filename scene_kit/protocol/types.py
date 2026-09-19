@@ -1,12 +1,13 @@
-"""WMK 前后端协议的公共类型与 projection 配置。"""
+"""Scene Kit 前后端协议的公共类型与 projection 配置。"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence, TypeAlias
 
-PROTOCOL_NAME = "wmk.world-snapshot"
-PROTOCOL_VERSION = "1.0"
+PROTOCOL_NAME = "scene-kit.world-snapshot"
+DELTA_PROTOCOL_NAME = "scene-kit.world-delta"
+PROTOCOL_VERSION = "1.1"
 
 WorldSnapshot: TypeAlias = dict[str, Any]
 WorldDelta: TypeAlias = dict[str, Any]
