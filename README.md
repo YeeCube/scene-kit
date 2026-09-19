@@ -24,6 +24,12 @@ graph TB
     style B fill:#f2a900,color:#000
 ```
 
+## v0.7.0
+
+- 关系一等公民：`WorldModel.bind/unbind/relations()` 命名边表；`WorldSnapshot/WorldDelta` 落地 `relationBatches` 列式投影与增量（Python ↔ TS 对称）。
+- 交互命令扩展：`select`（uids/rect 框选）、批处理宏（`batch_move`/`batch_set_attribute`）、关系命令（`bind_relation`/`unbind_relation`/`snap_to_slots` 逻辑吸附）；`despawn` 级联清理关系边。
+- 协议命名空间：`wmk.world-*` → `scene-kit.world-*`（protocolVersion 1.1）；新增跳棋/战术板两个演示场景。
+
 ## v0.6.0
 
 - 交互协议：`WorldSnapshot`/`WorldDelta`、msgpack、WebSocket 重连、心跳与可选鉴权钩子。
