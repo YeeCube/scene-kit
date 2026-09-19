@@ -48,6 +48,8 @@ class ModelSession:
         self._commands: deque[WorldCommand] = deque()
         self._lock = RLock()
         self._previous_snapshot: dict[str, Any] | None = None
+        # SelectionSet：会话态选择集（kind -> uid 列表），不进快照（ADR-002 D2）
+        self._selection: dict[str, list[str]] = {}
 
     @property
     def capabilities(self) -> dict[str, Any]:
@@ -65,6 +67,14 @@ class ModelSession:
                 "move",
                 "set_attribute",
                 "set_tag",
+                "select",
+                "clear_selection",
+                "get_selection",
+                "batch_move",
+                "batch_set_attribute",
+                "bind_relation",
+                "unbind_relation",
+                "snap_to_slots",
             ],
             "snapshot": True,
             "delta": True,
@@ -151,6 +161,180 @@ class ModelSession:
         indices = self._indices_for_uids(kind, payload.get("uids", []))
         self.model.set_attr(kind, field, indices, payload.get("values"))
 
+    # ------------------------------------------------------------------
+    # SelectionSet 与批处理（ADR-002 D2）
+    # ------------------------------------------------------------------
+
+    def _uids_of_kind(self, kind: str, indices: np.ndarray | None = None) -> list[str]:
+        pool = self.model.get_pool(kind)
+        raw = pool.d["i"][: pool.size] if indices is None else pool.d["i"][indices]
+        values = raw if isinstance(raw, np.ndarray) else pool.backend.to_numpy(raw)
+        return [str(int(uid)) for uid in np.asarray(values)]
+
+    def _select(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        kind = str(payload["kind"])
+        if kind not in self.model.list_kinds():
+            raise KeyError(f"未知 EntityKind: {kind}")
+        mode = str(payload.get("mode", "replace"))
+        rect = payload.get("rect")
+        if "uids" in payload:
+            uids = [str(value) for value in np.atleast_1d(payload["uids"]).tolist()]
+        elif rect is not None:
+            pool = self.model.get_pool(kind)
+            active = self.model._lifecycle[kind].active_indices
+            if len(active) == 0 or "u" not in pool.d or "v" not in pool.d:
+                uids = []
+            else:
+                u = np.asarray(pool.d["u"][: pool.size], dtype=np.float64)[active]
+                v = np.asarray(pool.d["v"][: pool.size], dtype=np.float64)[active]
+                mask = (
+                    (u >= float(rect.get("u_min", -np.inf)))
+                    & (u <= float(rect.get("u_max", np.inf)))
+                    & (v >= float(rect.get("v_min", -np.inf)))
+                    & (v <= float(rect.get("v_max", np.inf)))
+                )
+                uids = self._uids_of_kind(kind, active[np.asarray(mask, dtype=bool)])
+        else:
+            raise ValueError("select 需要 uids 或 rect 之一")
+        current = self._selection.get(kind, [])
+        if mode == "add":
+            merged = list(dict.fromkeys([*current, *uids]))
+        elif mode == "remove":
+            drop = set(uids)
+            merged = [uid for uid in current if uid not in drop]
+        else:
+            merged = list(dict.fromkeys(uids))
+        if merged:
+            self._selection[kind] = merged
+        else:
+            self._selection.pop(kind, None)
+        return {"selection": {k: list(v) for k, v in self._selection.items()}}
+
+    def _selected_pairs(self, kinds: Any) -> list[tuple[str, list[str]]]:
+        wanted = {str(k) for k in kinds} if kinds else set(self._selection)
+        return [(kind, list(uids)) for kind, uids in self._selection.items() if kind in wanted]
+
+    def _batch_move(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        delta = np.asarray(payload["delta"], dtype=np.float32)
+        applied: dict[str, int] = {}
+        for kind, uids in self._selected_pairs(payload.get("kinds")):
+            pool = self.model.get_pool(kind)
+            if "u" not in pool.d or "v" not in pool.d:
+                continue
+            indices = self._indices_for_uids(kind, uids)
+            self.model.move(kind, indices, delta)
+            applied[kind] = len(uids)
+        return {"applied": applied}
+
+    def _batch_set_attribute(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        field = str(payload["field"])
+        if field in {"i", "o", "_kind", "_active", "_step_fn", "_parent_id", "_type"} or field.startswith("_"):
+            raise ValueError(f"'{field}' 不是可编辑属性")
+        applied: dict[str, int] = {}
+        for kind, uids in self._selected_pairs(payload.get("kinds")):
+            pool = self.model.get_pool(kind)
+            if field not in pool.d:
+                continue
+            indices = self._indices_for_uids(kind, uids)
+            self.model.set_attr(kind, field, indices, payload.get("value"))
+            applied[kind] = len(uids)
+        return {"applied": applied}
+
+    # ------------------------------------------------------------------
+    # 关系命令与逻辑吸附（ADR-002 D3）
+    # ------------------------------------------------------------------
+
+    def _bind_relation(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        name = str(payload["name"])
+        attrs = payload.get("attrs", {})
+        if not isinstance(attrs, Mapping):
+            raise ValueError("bind_relation.attrs 必须是对象")
+        count = self.model.bind(
+            name,
+            str(payload["srcKind"]),
+            str(payload["dstKind"]),
+            payload.get("srcUids", []),
+            payload.get("dstUids", []),
+            **dict(attrs),
+        )
+        return {"name": name, "count": count}
+
+    def _unbind_relation(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        name = str(payload["name"])
+        count = self.model.unbind(
+            name,
+            src_uids=payload.get("srcUids"),
+            dst_uids=payload.get("dstUids"),
+        )
+        return {"name": name, "count": count}
+
+    def _snap_to_slots(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """把选中（或指定）实体吸附到最近的落点实体并生成逻辑绑定。
+
+        落点 = ``slot_kind`` 的 point geometry 活跃实体；半径内取最近者，
+        ``align=True``（默认）时把实体坐标对齐到落点，并 bind ``relation``
+        （默认 ``is_on``）边（ADR-002 D3：吸附提交生成 Relation）。
+        """
+        kind = str(payload["kind"])
+        slot_kind = str(payload["slotKind"])
+        radius = float(payload.get("radius", 1.0))
+        relation = str(payload.get("relation", "is_on"))
+        align = bool(payload.get("align", True))
+        uids = payload.get("uids")
+        if uids is None:
+            uids = self._selection.get(kind, [])
+        uids = [str(value) for value in np.atleast_1d(uids).tolist()]
+        if not uids:
+            return {"snapped": [], "skipped": []}
+        pool = self.model.get_pool(kind)
+        slot_pool = self.model.get_pool(slot_kind)
+        slot_active = self.model._lifecycle[slot_kind].active_indices
+        if len(slot_active) == 0:
+            return {"snapped": [], "skipped": list(uids)}
+        slot_u = np.asarray(slot_pool.d["u"][: slot_pool.size], dtype=np.float64)[slot_active]
+        slot_v = np.asarray(slot_pool.d["v"][: slot_pool.size], dtype=np.float64)[slot_active]
+        slot_uids = np.asarray(self._uids_of_kind(slot_kind, slot_active))
+        indices = self._indices_for_uids(kind, uids)
+        ent_u = np.asarray(pool.d["u"][: pool.size], dtype=np.float64)[indices]
+        ent_v = np.asarray(pool.d["v"][: pool.size], dtype=np.float64)[indices]
+        snapped: list[dict[str, Any]] = []
+        skipped: list[str] = []
+        hit_local: list[int] = []
+        hit_slot: list[int] = []
+        for local, (eu, ev) in enumerate(zip(ent_u.tolist(), ent_v.tolist())):
+            distances = np.hypot(slot_u - eu, slot_v - ev)
+            nearest = int(np.argmin(distances))
+            if distances[nearest] <= radius:
+                snapped.append({"uid": uids[local], "slotUid": str(slot_uids[nearest])})
+                hit_local.append(local)
+                hit_slot.append(nearest)
+            else:
+                skipped.append(uids[local])
+        if snapped:
+            if align:
+                self.model.move_to(
+                    kind,
+                    indices[np.asarray(hit_local, dtype=np.int64)],
+                    slot_u[np.asarray(hit_slot, dtype=np.int64)],
+                    slot_v[np.asarray(hit_slot, dtype=np.int64)],
+                )
+            self.model.bind(
+                relation,
+                kind,
+                slot_kind,
+                np.asarray([int(item["uid"]) for item in snapped], dtype=np.int64),
+                np.asarray([int(item["slotUid"]) for item in snapped], dtype=np.int64),
+            )
+        return {"snapped": snapped, "skipped": skipped}
+
+    def _cascade_unbind(self, kind: str, uids: list[str]) -> None:
+        """实体消亡时级联清理其出入边（清偿 M1 悬空边限制）。"""
+        for name, meta in list(self.model.relations().items()):
+            if meta["srcKind"] == kind:
+                self.model.unbind(name, src_uids=uids)
+            if meta["dstKind"] == kind:
+                self.model.unbind(name, dst_uids=uids)
+
     def _apply_command(self, command: WorldCommand) -> CommandResult:
         try:
             data: dict[str, Any] = {}
@@ -171,6 +355,7 @@ class ModelSession:
                 self.model = self.model_factory(dict(self.parameters))
                 self.playing = False
                 self._previous_snapshot = None
+                self._selection = {}
             elif command.type == "set_rate":
                 rate = float(payload["rate"])
                 if not np.isfinite(rate) or rate <= 0:
@@ -188,8 +373,15 @@ class ModelSession:
                 data = self._spawn(payload)
             elif command.type == "despawn":
                 kind = str(payload["kind"])
-                indices = self._indices_for_uids(kind, payload.get("uids", []))
+                uids = [str(value) for value in np.atleast_1d(payload.get("uids", [])).tolist()]
+                indices = self._indices_for_uids(kind, uids)
                 self.model.kill(kind, indices)
+                self._cascade_unbind(kind, uids)
+                self._selection[kind] = [
+                    uid for uid in self._selection.get(kind, []) if uid not in set(uids)
+                ]
+                if not self._selection.get(kind):
+                    self._selection.pop(kind, None)
             elif command.type == "move":
                 kind = str(payload["kind"])
                 indices = self._indices_for_uids(kind, payload.get("uids", []))
@@ -203,6 +395,23 @@ class ModelSession:
                     raise ValueError(f"'{field}' 不是 {kind} 的公开 tag")
                 indices = self._indices_for_uids(kind, payload.get("uids", []))
                 self.model.set_attr(kind, field, indices, payload.get("values"))
+            elif command.type == "select":
+                data = self._select(payload)
+            elif command.type == "clear_selection":
+                self._selection = {}
+                data = {"selection": {}}
+            elif command.type == "get_selection":
+                data = {"selection": {k: list(v) for k, v in self._selection.items()}}
+            elif command.type == "batch_move":
+                data = self._batch_move(payload)
+            elif command.type == "batch_set_attribute":
+                data = self._batch_set_attribute(payload)
+            elif command.type == "bind_relation":
+                data = self._bind_relation(payload)
+            elif command.type == "unbind_relation":
+                data = self._unbind_relation(payload)
+            elif command.type == "snap_to_slots":
+                data = self._snap_to_slots(payload)
             else:
                 raise ValueError(f"不支持的命令类型: {command.type}")
             return CommandResult(command.command_id, True, self.model.tick, data=data)
