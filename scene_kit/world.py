@@ -42,6 +42,7 @@ from scene_kit.entity_kind import EntityKind
 from scene_kit.entity_lifecycle import EntityLifecycleManager
 from scene_kit.entity_pool_bridge import EntityPoolBridge
 from scene_kit.geometry.base import Geometry
+from scene_kit.geometry.hypergraph import HypergraphGeometry
 from scene_kit.geometry.path import PathGeometry
 from scene_kit.geometry.point import PointGeometry
 from scene_kit.geometry.surface import SurfaceGeometry
@@ -207,6 +208,8 @@ class WorldModel:
             # 结构由构造侧生成（§3.8 结论 1）：注册时先挂空网络（仅拓扑），
             # 真实网络经 set_geometry() 或 add_root_path() 注入。
             self._geometry[kind.name] = PathGeometry()
+        elif kind.geometry == "hypergraph":
+            self._geometry[kind.name] = HypergraphGeometry()
         else:
             self._geometry[kind.name] = PointGeometry()
 
@@ -236,6 +239,24 @@ class WorldModel:
         logger.info("根 path: %s 节点 / %s 边 / 总长 %.1f",
                      geo.node_count, geo.edge_count, geo.total_length)
         return geo
+
+    @classmethod
+    def from_snapshot(cls, snapshot: dict, **kwargs) -> "WorldModel":
+        """从 WorldSnapshot 水合出可继续演化的模型（世界线节点 → 初始态）。
+
+        纯数据操作（§12.3）：uid、列值、parent、关系与 tick 均恢复；
+        会话态（选择集、playing）不属于协议，不恢复。
+
+        Args:
+            snapshot: ``export_snapshot(format="dict")`` 产物。
+            **kwargs: 传给 WorldModel 构造器（backend/seed/scheduler）。
+
+        Returns:
+            WorldModel: 与快照节点等价的新世界，可从该 tick 继续 step。
+        """
+        from scene_kit.protocol.rehydrate import snapshot_to_model
+
+        return snapshot_to_model(snapshot, WorldModel(**kwargs))
 
     def unregister_kind(self, name: str) -> None:
         """注销一个 EntityKind。"""
@@ -344,12 +365,14 @@ class WorldModel:
         if d.shape[0] == 1 and len(ids) > 1:
             d = np.tile(d, (len(ids), 1))
 
-        if "t" in pool.d and "u" not in pool.d:
-            # path geometry：单列弧长坐标，边内移动 + 交叉点钳制
+        structural = "t" if "t" in pool.d else (
+            "vertex_id" if "vertex_id" in pool.d else None)
+        if structural is not None and "u" not in pool.d:
+            # 结构 geometry（path/hypergraph）：单列参数坐标
             geo = self._geometry.get(kind, PointGeometry())
-            pos = pool.d["t"][ids].astype(np.float64).reshape(-1, 1)
+            pos = pool.d[structural][ids].astype(np.float64).reshape(-1, 1)
             new_pos = geo.move(pos, d[:, :1], dt)
-            pool.d["t"][ids] = new_pos[:, 0].astype(pool.d["t"].dtype)
+            pool.d[structural][ids] = new_pos[:, 0].astype(pool.d[structural].dtype)
             return
 
         if "u" not in pool.d:
@@ -431,8 +454,18 @@ class WorldModel:
         self, kind: str, ids: np.ndarray,
         cx: Any, cy: Any, radius: float,
     ) -> np.ndarray:
-        """半径内搜索。"""
+        """半径内搜索（结构 geometry 按局部坐标距离计）。"""
         pool = self._bridge.get_pool(kind)
+        if "u" not in pool.d:
+            structural = "t" if "t" in pool.d else (
+                "vertex_id" if "vertex_id" in pool.d else None)
+            if structural is None:
+                return np.asarray([], dtype=np.int64)
+            geo = self._geometry.get(kind, PointGeometry())
+            local = geo.param_to_local(
+                pool.d[structural][ids].astype(np.float64).reshape(-1, 1))
+            dist = np.hypot(local[:, 0] - float(cx), local[:, 1] - float(cy))
+            return ids[dist < radius]
         u = pool.d["u"][ids].astype(np.float64)
         v = pool.d["v"][ids].astype(np.float64)
         du = u - np.float64(cx)
@@ -444,9 +477,11 @@ class WorldModel:
         """递归求解世界坐标。返回 shape=(n, 3)。"""
         pool = self._bridge.get_pool(kind)
         if "u" not in pool.d:
-            if "t" in pool.d:
+            structural = "t" if "t" in pool.d else (
+                "vertex_id" if "vertex_id" in pool.d else None)
+            if structural is not None:
                 geo = self._geometry.get(kind, PointGeometry())
-                pos = pool.d["t"][ids].astype(np.float64).reshape(-1, 1)
+                pos = pool.d[structural][ids].astype(np.float64).reshape(-1, 1)
                 return geo.param_to_local(pos)
             return np.zeros((len(ids), 3), dtype=np.float32)
         pos = np.column_stack([pool.d["u"][ids], pool.d["v"][ids]])

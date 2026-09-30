@@ -10,6 +10,7 @@
 
 from scene_kit.geometry.base import Geometry
 from scene_kit.geometry.embedding import Embedding
+from scene_kit.geometry.hypergraph import HypergraphGeometry
 from scene_kit.geometry.path import PathGeometry
 from scene_kit.geometry.point import PointGeometry
 from scene_kit.geometry.surface import SurfaceGeometry
@@ -18,6 +19,7 @@ from scene_kit.geometry.volume import VolumeGeometry
 __all__ = [
     "Geometry",
     "Embedding",
+    "HypergraphGeometry",
     "PathGeometry",
     "PointGeometry",
     "SurfaceGeometry",

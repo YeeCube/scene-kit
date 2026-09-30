@@ -37,13 +37,21 @@ class ModelSession:
         parameters: Mapping[str, Any] | None = None,
         projection: SnapshotProjection | Mapping[str, Any] | None = None,
         name: str = "world-model",
+        autostart: bool = True,
     ) -> None:
+        """创建一个交互会话。
+
+        Args:
+            autostart: Always-On 默认（ADR-002 D4 / 主设计 §12.5）：创建即
+                running，编辑动作本就走命令队列、tick 边界生效。传 False
+                保留 play/pause/step 分离范式。
+        """
         self.model = model
         self.model_factory = model_factory
         self.parameters: dict[str, Any] = dict(parameters or {})
         self.projection = SnapshotProjection.from_value(projection)
         self.name = name
-        self.playing = False
+        self.playing = bool(autostart)
         self.rate = 10.0
         self._commands: deque[WorldCommand] = deque()
         self._lock = RLock()
@@ -78,6 +86,7 @@ class ModelSession:
             ],
             "snapshot": True,
             "delta": True,
+            "fork": True,
             "seek": False,
             "reset": self.model_factory is not None,
         }
@@ -219,7 +228,8 @@ class ModelSession:
         applied: dict[str, int] = {}
         for kind, uids in self._selected_pairs(payload.get("kinds")):
             pool = self.model.get_pool(kind)
-            if "u" not in pool.d or "v" not in pool.d:
+            movable = ("u" in pool.d and "v" in pool.d) or "t" in pool.d or "vertex_id" in pool.d
+            if not movable:
                 continue
             indices = self._indices_for_uids(kind, uids)
             self.model.move(kind, indices, delta)
@@ -432,6 +442,53 @@ class ModelSession:
             result = self.model.export_snapshot(self.projection, format="dict")
             assert isinstance(result, dict)
             return result
+
+    # ------------------------------------------------------------------
+    # 世界线：从快照节点分叉（§12.3；树/标签/注释归上层存档库）
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_snapshot(
+        cls,
+        snapshot: Mapping[str, Any],
+        *,
+        projection: SnapshotProjection | Mapping[str, Any] | None = None,
+        parameters: Mapping[str, Any] | None = None,
+        name: str = "world-line-node",
+        autostart: bool = False,
+    ) -> "ModelSession":
+        """把一份快照水合为新会话（世界线节点的会话化入口）。"""
+        model = WorldModel.from_snapshot(dict(snapshot))
+        return cls(
+            model,
+            projection=projection,
+            parameters=parameters,
+            name=name,
+            autostart=autostart,
+        )
+
+    def fork(
+        self,
+        snapshot: Mapping[str, Any] | None = None,
+        *,
+        name: str | None = None,
+        autostart: bool = False,
+    ) -> "ModelSession":
+        """从任意节点（默认当前态）分叉出一条新世界线。
+
+        分叉会话与原会话完全隔离（独立 WorldModel）；默认停在分叉 tick，
+        是否立即演化由上层决定（Always-On 归宿主语义）。
+        """
+        base = dict(snapshot) if snapshot is not None else self.snapshot()
+        tick = int(base.get("tick", 0))
+        session = ModelSession.from_snapshot(
+            base,
+            projection=self.projection,
+            parameters=dict(self.parameters),
+            name=name or f"{self.name}@fork#{tick}",
+            autostart=autostart,
+        )
+        return session
 
     def next_message(self, *, prefer_delta: bool = False) -> dict[str, Any]:
         """生成下一条 snapshot 或基于上一快照的 delta。"""

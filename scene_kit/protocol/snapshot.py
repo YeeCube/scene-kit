@@ -7,6 +7,8 @@ from typing import Any, Mapping, TYPE_CHECKING
 
 import numpy as np
 
+from scene_kit.geometry.hypergraph import HypergraphGeometry
+from scene_kit.geometry.path import PathGeometry
 from scene_kit.geometry.surface import SurfaceGeometry
 from scene_kit.geometry.volume import VolumeGeometry
 from scene_kit.protocol.types import (
@@ -64,6 +66,20 @@ def _world_metadata(model: "WorldModel") -> dict[str, Any]:
                 "w": [0.0, root.depth],
             },
         }
+    if isinstance(root, PathGeometry):
+        return {
+            "dimensions": 1,
+            "coordinateSystem": "network",
+            "bounds": {"t": [0.0, root.total_length]},
+            "structure": root.summary(),
+        }
+    if isinstance(root, HypergraphGeometry):
+        return {
+            "dimensions": None,
+            "coordinateSystem": "hypergraph",
+            "bounds": {},
+            "structure": root.summary(),
+        }
     return {"dimensions": None, "coordinateSystem": "unspecified", "bounds": {}}
 
 
@@ -74,18 +90,30 @@ def _visible_indices(
     if len(active) == 0 or projection.viewport is None:
         return active
     pool = model._bridge.get_pool(kind)
-    if "u" not in pool.d or "v" not in pool.d:
-        return active
-    u = _as_numpy(pool, "u")[active]
-    v = _as_numpy(pool, "v")[active]
     viewport = projection.viewport
-    mask = (
-        (u >= viewport.get("u_min", -np.inf))
-        & (u <= viewport.get("u_max", np.inf))
-        & (v >= viewport.get("v_min", -np.inf))
-        & (v <= viewport.get("v_max", np.inf))
-    )
-    return active[np.asarray(mask, dtype=bool)]
+    if "u" in pool.d and "v" in pool.d:
+        u = _as_numpy(pool, "u")[active]
+        v = _as_numpy(pool, "v")[active]
+        mask = (
+            (u >= viewport.get("u_min", -np.inf))
+            & (u <= viewport.get("u_max", np.inf))
+            & (v >= viewport.get("v_min", -np.inf))
+            & (v <= viewport.get("v_max", np.inf))
+        )
+        return active[np.asarray(mask, dtype=bool)]
+    # 结构 geometry 的空间范围裁剪（§3.8 结论 5）：按参数列区间
+    for column, (low_key, high_key) in (
+        ("t", ("t_min", "t_max")),
+        ("vertex_id", ("vertex_min", "vertex_max")),
+    ):
+        if column in pool.d:
+            values = _as_numpy(pool, column)[active].astype(np.float64)
+            mask = (
+                (values >= viewport.get(low_key, -np.inf))
+                & (values <= viewport.get(high_key, np.inf))
+            )
+            return active[np.asarray(mask, dtype=bool)]
+    return active
 
 
 def _parent_uid_column(model: "WorldModel", kind: str, indices: np.ndarray) -> list[str | None]:
