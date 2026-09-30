@@ -24,6 +24,21 @@
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **PathGeometry（折线网络，geometry 六类之 3/6→4/6）**：`scene_kit/geometry/path.py`。全局弧长参数化（位置列 `t ∈ [0, L)`，边身份可反查）；网络最短路度量（节点图 Dijkstra 全对缓存）；`move` 只在当前边内位移、交叉点钳制（不自动选路，路由决策归行为层）；`route(t_from, t_to)` 提供显式路由（距离/途经节点/边序列）；支持带拐点的弯曲边。
+- **Embedding 显式嵌入声明**：`scene_kit/geometry/embedding.py`（space/metric/dims/unit/meta）。构造与挂载分离（主设计 §3.8）：未声明嵌入的网络只提供拓扑查询（邻接、参数归属），几何查询（长度/距离/坐标解析/路由）一律拒绝；内置度规限于 euclidean/manhattan。
+- `road_map.build_path_geometry`：路网提取结果 → PathGeometry 适配器（像素 (行,列) → (x,y) 换算；缺省声明像素空间，可显式覆盖）。
+- `WorldModel.set_geometry(kind, geometry)` / `add_root_path(nodes, edges, embedding)`：注入构造侧生成的结构；`move` / `resolve_world_position` 支持 path 的 `t` 位置列。
+
+### Notes
+
+- 已知边界（第一版，刻意为之）：move 不跨交叉点自动选路；弧长区间端点归属下一条边起点（交叉点处无歧义，几何同点）；`within_radius`/`intersects` 等 surface 专用查询暂未覆盖 path；快照裁剪（T1.4）与 hypergraph（T1.3）未动工。
+
+---
+
 ## [0.7.0] - 2026-09-20
 
 ### Added
