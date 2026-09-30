@@ -36,12 +36,16 @@ data = ["pandas>=2.2.0"]
 visualization = [
     "matplotlib>=3.8.0",
 ]
+importers = [
+    "scikit-image>=0.25",
+    "pillow>=11.0",
+]
 protocol = ["msgpack>=1.1.0"]
 server = ["websockets>=15.0"]
 torch = ["torch>=2.4.0"]
 mlx = ["mlx>=0.22.0"]
 jax = ["jax>=0.4.30", "jaxlib>=0.4.30"]
-all = ["scene-kit[data,dev,visualization,protocol,server,torch,mlx,jax]"]
+all = ["scene-kit[data,dev,visualization,importers,protocol,server,torch,mlx,jax]"]
 
 [tool.setuptools.packages.find]
 where = ["."]
