@@ -25,7 +25,7 @@ from pathlib import Path
 
 import numpy as np
 
-__all__ = ["extract_road_network_from_image"]
+__all__ = ["extract_road_network_from_image", "build_path_geometry"]
 
 # 八邻域偏移
 _NEIGHBOR_OFFSETS: tuple[tuple[int, int], ...] = tuple(
@@ -125,6 +125,46 @@ def extract_road_network_from_image(
         "skeleton_id_map": id_map,
         "road_mask": road_mask,
     }
+
+
+def build_path_geometry(
+    roads: dict,
+    embedding=None,
+):
+    """把路网提取结果适配为可挂载的 PathGeometry。
+
+    构造与挂载分离（§3.8）：本函数只做「提取结果 → 结构 + 嵌入声明」的
+    整理，不负责在世界中的语义；坐标由像素 (行, 列) 换算为 (x=列, y=行)。
+
+    Args:
+        roads: ``extract_road_network_from_image`` 的返回值。
+        embedding: 显式嵌入声明；None 时默认像素空间欧氏度规
+            （``Embedding(space="pixel", unit="px")``）。导入方若坐标
+            属于其它空间（地理、世界米制），必须自行声明传入。
+
+    Returns:
+        PathGeometry: 节点=交叉点、边=道路（含像素拐点序列）的折线网络。
+    """
+    from scene_kit.geometry.embedding import Embedding
+    from scene_kit.geometry.path import PathGeometry
+
+    declared = embedding or Embedding(space="pixel", unit="px",
+                                      metric="euclidean", dims=2)
+    junctions = roads["junctions"]
+    nodes = np.array(
+        [[float(col), float(row)] for row, col in
+         (junctions[i] for i in range(len(junctions)))],
+        dtype=np.float64,
+    )
+    edges: list[tuple[int, int, np.ndarray]] = []
+    for edge in roads["edges"].values():
+        start, end = (int(edge["endpoints"][0]), int(edge["endpoints"][1]))
+        polyline = np.array(
+            [[float(col), float(row)] for row, col in edge["pixels"]],
+            dtype=np.float64,
+        ) if len(edge["pixels"]) else None
+        edges.append((start, end, polyline))
+    return PathGeometry(nodes=nodes, edges=edges, embedding=declared)
 
 
 def _extract_skeleton(image_signed: np.ndarray, morphology, measure) -> np.ndarray:

@@ -7,8 +7,13 @@
 
 - :func:`scene_kit.importers.road_map.extract_road_network_from_image`
   从人工标记的图片中提取路网（交叉点 / 道路边 / 路由点）。
+- :func:`scene_kit.importers.road_map.build_path_geometry`
+  把提取结果适配为可挂载的 PathGeometry（构造与挂载分离的适配器）。
 """
 
-from scene_kit.importers.road_map import extract_road_network_from_image
+from scene_kit.importers.road_map import (
+    build_path_geometry,
+    extract_road_network_from_image,
+)
 
-__all__ = ["extract_road_network_from_image"]
+__all__ = ["extract_road_network_from_image", "build_path_geometry"]

@@ -42,6 +42,7 @@ from scene_kit.entity_kind import EntityKind
 from scene_kit.entity_lifecycle import EntityLifecycleManager
 from scene_kit.entity_pool_bridge import EntityPoolBridge
 from scene_kit.geometry.base import Geometry
+from scene_kit.geometry.path import PathGeometry
 from scene_kit.geometry.point import PointGeometry
 from scene_kit.geometry.surface import SurfaceGeometry
 from scene_kit.geometry.volume import VolumeGeometry
@@ -202,11 +203,39 @@ class WorldModel:
             self._geometry[kind.name] = SurfaceGeometry()
         elif kind.geometry == "volume":
             self._geometry[kind.name] = VolumeGeometry()
+        elif kind.geometry == "path":
+            # 结构由构造侧生成（§3.8 结论 1）：注册时先挂空网络（仅拓扑），
+            # 真实网络经 set_geometry() 或 add_root_path() 注入。
+            self._geometry[kind.name] = PathGeometry()
         else:
             self._geometry[kind.name] = PointGeometry()
 
         logger.info("注册 EntityKind: %s (geometry=%s, dim=%.1f, tags=%s)",
                      kind.name, kind.geometry, kind.dim, list(kind.tags.keys()))
+
+    def set_geometry(self, kind: str, geometry: Geometry) -> None:
+        """注入构造侧已生成的 geometry 实例。
+
+        构造与挂载分离（§3.8 结论 1）：结构网络（节点、边、嵌入声明）由
+        构造侧/导入器生成，World 只负责挂载后的语义（查询、移动、投影）。
+        """
+        if kind not in self._kind_defs:
+            raise KeyError(f"EntityKind '{kind}' 未注册。")
+        self._geometry[kind] = geometry
+        logger.info("注入 geometry: %s <- %s", kind, type(geometry).__name__)
+
+    def add_root_path(
+        self,
+        nodes,
+        edges,
+        embedding=None,
+    ) -> PathGeometry:
+        """添加折线网络作为根 geometry（path 结构的根形态）。"""
+        geo = PathGeometry(nodes=nodes, edges=edges, embedding=embedding)
+        self._root_geometry = geo
+        logger.info("根 path: %s 节点 / %s 边 / 总长 %.1f",
+                     geo.node_count, geo.edge_count, geo.total_length)
+        return geo
 
     def unregister_kind(self, name: str) -> None:
         """注销一个 EntityKind。"""
@@ -315,6 +344,14 @@ class WorldModel:
         if d.shape[0] == 1 and len(ids) > 1:
             d = np.tile(d, (len(ids), 1))
 
+        if "t" in pool.d and "u" not in pool.d:
+            # path geometry：单列弧长坐标，边内移动 + 交叉点钳制
+            geo = self._geometry.get(kind, PointGeometry())
+            pos = pool.d["t"][ids].astype(np.float64).reshape(-1, 1)
+            new_pos = geo.move(pos, d[:, :1], dt)
+            pool.d["t"][ids] = new_pos[:, 0].astype(pool.d["t"].dtype)
+            return
+
         if "u" not in pool.d:
             return
 
@@ -407,6 +444,10 @@ class WorldModel:
         """递归求解世界坐标。返回 shape=(n, 3)。"""
         pool = self._bridge.get_pool(kind)
         if "u" not in pool.d:
+            if "t" in pool.d:
+                geo = self._geometry.get(kind, PointGeometry())
+                pos = pool.d["t"][ids].astype(np.float64).reshape(-1, 1)
+                return geo.param_to_local(pos)
             return np.zeros((len(ids), 3), dtype=np.float32)
         pos = np.column_stack([pool.d["u"][ids], pool.d["v"][ids]])
         if "w" in pool.d:
