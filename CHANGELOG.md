@@ -33,9 +33,15 @@
 - `road_map.build_path_geometry`：路网提取结果 → PathGeometry 适配器（像素 (行,列) → (x,y) 换算；缺省声明像素空间，可显式覆盖）。
 - `WorldModel.set_geometry(kind, geometry)` / `add_root_path(nodes, edges, embedding)`：注入构造侧生成的结构；`move` / `resolve_world_position` 支持 path 的 `t` 位置列。
 
+- **HypergraphGeometry（离散超图，geometry 5/6）**：`scene_kit/geometry/hypergraph.py`。位置列 `vertex_id`（int64）；距离=关联图跳数（共边一跳，BFS 缓存）；`add_vertex`(可带坐标)/`add_hyperedge`/`members_of`/`edges_of`；param_to_local 需嵌入声明+顶点坐标，否则只给拓扑查询；move 仅做"取整钳制保列值合法"（离散结构无自然位移，换顶点用 set_attr）。
+- **结构几何的快照裁剪与元信息（T1.4）**：`viewport` 新增 `t_min/t_max`（path 弧长区间）与 `vertex_min/vertex_max`（hypergraph 顶点区间）；根为 path/hypergraph 时 `world.coordinateSystem` 为 `network`/`hypergraph` 并携带 `world.structure` 摘要（节点/边计数、空间、单位、总长）。
+- **世界线地基（§12.3 / T2.1+T2.2）**：`WorldModel.from_snapshot(snapshot)` 纯数据水合——uid 逐字保留、列值/parent/关系(含边属性)重放、tick 对齐，可继续 step；`ModelSession.from_snapshot()` 会话化入口与 `session.fork(snapshot=None)` 任意节点分叉（隔离新世界线，默认停在分叉 tick），`capabilities.fork=True`。树结构（父子/标签/注释）仍归上层存档库。
+- **Always-On 默认（§12.5 / T2.3）**：`ModelSession` 创建即 playing（新增 `autostart: bool = True`；传 `autostart=False` 保留 play/pause/step 分离范式）。
+- `within_radius` 与 `move`/`resolve_world_position` 覆盖结构 geometry（path `t` / hypergraph `vertex_id`）；`batch_move` 对选择集中的结构实体生效。
+
 ### Notes
 
-- 已知边界（第一版，刻意为之）：move 不跨交叉点自动选路；弧长区间端点归属下一条边起点（交叉点处无歧义，几何同点）；`within_radius`/`intersects` 等 surface 专用查询暂未覆盖 path；快照裁剪（T1.4）与 hypergraph（T1.3）未动工。
+- 已知边界（刻意为之）：move 不跨交叉点自动选路；弧长区间端点归属下一条边起点（交叉点处无歧义，几何同点）；**网络本体（节点/边内容）不进快照**——`world.structure` 只有摘要，宿主/存档库负责重放 `set_geometry` 注入结构（结构内容存档属 SA 层，后续按需扩协议）；水合不支持带 `schema.shape` 的多列数组属性（投影时裁掉）；merge/冲突裁决未实现（T2 后续）。
 
 ---
 
