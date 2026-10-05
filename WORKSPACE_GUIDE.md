@@ -85,4 +85,4 @@
 
 ---
 
-*本文件由 `generate_workspace_guides.py` 自动生成*
+*本文件由 `mlms_kit.aoc.workspace_guides` 自动生成*
